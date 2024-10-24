@@ -1,8 +1,9 @@
-# Start from a minimal base image
-FROM debian:buster-slim
+FROM docker.io/rust:1-slim-bookworm as cargo-build
+WORKDIR /src/
 
-# Set the working directory
-WORKDIR /app
+# Install dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked apt-get update && \
+    apt-get install -y git libssl-dev pkg-config git
 
 # Copy the binary from the `cross` build (adjust the path to your binary)
 COPY target/x86_64-unknown-linux-gnu/release/data-migration /app/data-migration
