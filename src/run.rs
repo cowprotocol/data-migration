@@ -14,22 +14,16 @@ pub async fn start(args: impl Iterator<Item = String>) {
         .await
         .unwrap();
 
-    // test db connection
-    let mut ex = db.pool.begin().await.unwrap();
-    let current_auction_id: Option<i64> =
-        sqlx::query_scalar::<_, Option<i64>>("SELECT MIN(id) FROM competition_auctions;")
-            .fetch_one(ex.deref_mut())
-            .await
-            .context("fetch lowest auction id")
-            .unwrap();
-    println!("current auction id: {:?}", current_auction_id);
+    populate_historic_auctions(&db).await.unwrap();
 
     // sleep for 10 minutes
     std::thread::sleep(std::time::Duration::from_secs(600));
 }
 
 pub async fn populate_historic_auctions(db: &Postgres) -> Result<()> {
-    const BATCH_SIZE: i64 = 50;
+    println!("starting data migration for auction data");
+
+    const BATCH_SIZE: i64 = 10;
 
     let mut ex = db.pool.begin().await?;
 
@@ -46,10 +40,14 @@ pub async fn populate_historic_auctions(db: &Postgres) -> Result<()> {
         return Ok(());
     };
 
+    let starting_auction_number = current_auction_id;
+
     loop {
         println!(
-            "populating historic auctions from auction {}",
-            current_auction_id
+            "populating historic auctions from auction {}, executed in percent: {}",
+            current_auction_id,
+            (starting_auction_number - current_auction_id) as f64 / starting_auction_number as f64
+                * 100.0
         );
 
         // fetch the next batch of auctions
@@ -106,6 +104,10 @@ pub async fn populate_historic_auctions(db: &Postgres) -> Result<()> {
 
         // commit each batch separately
         ex.commit().await?;
+
+        // sleep for 50ms
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
         ex = db.pool.begin().await?;
 
         // update the current auction id
