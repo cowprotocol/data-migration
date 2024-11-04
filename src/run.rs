@@ -56,6 +56,7 @@ pub async fn populate_historic_auctions(db: &Postgres) -> Result<()> {
         let Ok(competitions) = competitions else {
             // added because auction 3278851 has null json - unexpected entry in the database
             println!("failed to deserialize {}", current_auction_id);
+            current_auction_id = current_auction_id - 1;
             continue;
         };
 
