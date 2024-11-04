@@ -83,7 +83,6 @@ pub struct RichSolverCompetition {
 /// Entries are fetched going from higher auction_id to lower auction_id.
 pub async fn fetch_batch(
     ex: &mut PgConnection,
-    auction_id: i64,
     batch_size: i64,
 ) -> Result<Vec<RichSolverCompetition>, sqlx::Error> {
     const QUERY: &str = r#"
@@ -95,15 +94,12 @@ pub async fn fetch_batch(
         FROM solver_competitions sc
         LEFT JOIN settlement_scores ss ON sc.id = ss.auction_id
         LEFT JOIN surplus_capturing_jit_order_owners jit ON sc.id = jit.auction_id
-        WHERE sc.id < $1
+        LEFT JOIN competition_auctions ca ON sc.id = ca.id
+        WHERE ca.id IS NULL
         ORDER BY sc.id DESC
-        LIMIT $2;"#;
+        LIMIT $1;"#;
 
-    sqlx::query_as(QUERY)
-        .bind(auction_id)
-        .bind(batch_size)
-        .fetch_all(ex)
-        .await
+    sqlx::query_as(QUERY).bind(batch_size).fetch_all(ex).await
 }
 
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
