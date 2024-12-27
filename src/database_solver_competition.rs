@@ -1,4 +1,9 @@
-use bigdecimal::BigDecimal;
+use anyhow::ensure;
+use anyhow::Result;
+use bigdecimal::{
+    num_bigint::{Sign, ToBigInt},
+    BigDecimal,
+};
 use num::{BigInt, BigUint};
 use primitive_types::U256;
 use sqlx::{
@@ -70,6 +75,12 @@ pub type Address = ByteArray<20>;
 pub type OrderUid = ByteArray<56>;
 
 #[derive(Clone, Debug, sqlx::FromRow)]
+pub struct SolverCompetition {
+    pub id: i64,
+    pub json: JsonValue,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct RichSolverCompetition {
     pub id: i64,
     pub json: JsonValue,
@@ -100,6 +111,28 @@ pub async fn fetch_batch(
         LIMIT $2;"#;
 
         sqlx::query_as(QUERY)
+        .bind(auction_id)
+        .bind(batch_size)
+        .fetch_all(ex)
+        .await
+}
+
+/// Get a batch of solver competitions from the solver_competitions table.
+pub async fn fetch_competition_order_execution(
+    ex: &mut PgConnection,
+    auction_id: i64,
+    batch_size: i64,
+) -> Result<Vec<SolverCompetition>, sqlx::Error> {
+    const QUERY: &str = r#"
+        SELECT 
+        sc.id as id, 
+        sc.json as json,
+        FROM solver_competitions sc
+        WHERE sc.id < $1
+        ORDER BY sc.id DESC
+        LIMIT $2;"#;
+
+    sqlx::query_as(QUERY)
         .bind(auction_id)
         .bind(batch_size)
         .fetch_all(ex)
@@ -147,4 +180,23 @@ pub fn u256_to_big_uint(input: &U256) -> BigUint {
 pub fn u256_to_big_decimal(u256: &U256) -> BigDecimal {
     let big_uint = u256_to_big_uint(u256);
     BigDecimal::from(BigInt::from(big_uint))
+}
+
+pub fn big_uint_to_u256(input: &BigUint) -> Result<U256> {
+    let bytes = input.to_bytes_be();
+    ensure!(bytes.len() <= 32, "too large");
+    Ok(U256::from_big_endian(&bytes))
+}
+
+pub fn big_int_to_u256(input: &BigInt) -> Result<U256> {
+    ensure!(input.sign() != Sign::Minus, "negative");
+    big_uint_to_u256(input.magnitude())
+}
+
+pub fn big_decimal_to_u256(big_decimal: &BigDecimal) -> Option<U256> {
+    if !big_decimal.is_integer() {
+        return None;
+    }
+    let big_int = big_decimal.to_bigint()?;
+    big_int_to_u256(&big_int).ok()
 }
